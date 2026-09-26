@@ -1,0 +1,51 @@
+name: Build APPELEFANTE APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare offline web assets
+        run: |
+          set -euxo pipefail
+          rm -rf app/src/main/assets
+          mkdir -p app/src/main/assets
+          cat payload/web.zip.part* > web_bundle.zip
+          echo "8c97795c17099ddc270f705ff710628ef3653e458f0b98e66b51d23362976a0f  web_bundle.zip" | sha256sum -c -
+          unzip -q web_bundle.zip -d app/src/main/assets
+          test -s app/src/main/assets/index.html
+          test -s app/src/main/assets/assets/images/home.webp
+          test -s app/src/main/assets/js/app.js
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK with official Android toolchain
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Rename APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk appelefante.apk
+
+      - name: Validate APK
+        run: |
+          unzip -l appelefante.apk | grep 'assets/index.html'
+          unzip -l appelefante.apk | grep 'assets/assets/images/home.webp'
+          unzip -l appelefante.apk | grep 'assets/js/app.js'
+          unzip -t appelefante.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appelefante-apk
+          path: appelefante.apk
